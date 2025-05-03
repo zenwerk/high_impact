@@ -33,13 +33,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Use `alloc_pool()` for scoped memory allocation
 
 ## Engine Architecture
-- Engine is a framework, not a library - high_impact calls your code
+- Engine is a framework, not a library - high_impact calls your game code
 - Scene-based game organization with init/update/draw/cleanup lifecycle
 - Entity-component system with vtable-like design for entity types
 - Camera system with deadzone and lookahead features
 - Input and rendering systems are abstracted over different backends
 - Asset loading limited to QOI for images and QOA for audio
 - Uses weltmeister.html for level editing
+
+## Rendering System
+- Multiple renderer backends (OpenGL, Metal, Software) for cross-platform support
+- Renderer abstraction layer in `render.h` and `render.c`
+- Platform-specific implementations in `render_gl.c`, `render_metal.m`, and `render_software.c`
+- Logical resolution vs. physical screen resolution with configurable scaling modes
+- Transform stack for hierarchical positioning, rotation, and scaling
+- Post-processing effects support including CRT simulation
+- Texture atlas for efficient batch rendering
+- Blend modes for normal and additive transparency
 
 ## Debugging
 - The engine will terminate with clear error messages on allocation failures
@@ -51,3 +61,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `src/` - Engine core code
 - `libs/` - External dependencies (bundled)
 - Entry point is through `main_init()` that must be implemented by the game
+
+## Japanese Comments
+- Many source files contain Japanese comments for educational purposes
+- Comments explain core concepts for readers with no prior graphics or game programming experience
+- Comments maintain a consistent style with initial concept overview followed by detailed explanations
