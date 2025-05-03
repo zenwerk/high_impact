@@ -1,81 +1,102 @@
 #ifndef HI_ALLOC_H
 #define HI_ALLOC_H
 
-// We statically reserve a single "hunk" of memory at program start. Memory
-// (for our own allocators) can not ever outgrow this hunk. There's two ways to
-// allocate bytes from this hunk:
+// メモリ管理システム
+// プログラム開始時に単一の「ハンク」（固定サイズのメモリブロック）を静的に確保します。
+// このメモリアロケータシステムは、このハンクを超えてメモリを使用することはできません。
+// このハンクからメモリを割り当てる方法は2つあります：
 
-//   1. A bump allocator that just grows linearly and may be reset to a previous 
-// level. This returns bytes from the front of the hunk and is meant for all
-// data the game needs while it's running.
+// 1. バンプアロケータ（線形アロケータ）
+//    単純に線形に成長し、以前のレベルにリセットできるアロケータです。
+//    ハンクの先頭からバイトを返し、ゲーム実行中に必要なすべてのデータ用です。
+//
+//    【C言語テクニック】バンプアロケータはmalloc/freeよりも高速ですが、
+//    メモリ解放は一括でしか行えないという制限があります。これは組み込みシステムや
+//    ゲーム開発でよく使われる手法です。
 
-// high_impact mostly manages this bump level for you. First everything that is 
-// bump-allocated _before_ engine_set_scene() is called will only be freed when.
-// the program ends.
-// Then, when a scene is loaded the bump position is recorded. When the current
-// scene ends (i.e. engine_set_scene() is called again), the bump allocator is
-// reset to that position. Conceptually the scene is wrapped in an alloc_pool().
-// Thirdly, each frame is wrapped in an alloc_pool().
+// high_impactは基本的にこのバンプレベルを自動管理します。
+// - engine_set_scene()が呼び出される前にバンプ割り当てされたものは、
+//   プログラム終了時にのみ解放されます。
+// - シーンがロードされると、バンプ位置が記録されます。現在のシーンが終了すると
+//   （つまりengine_set_scene()が再び呼び出されると）、バンプアロケータは
+//   その位置にリセットされます。概念的には、シーンはalloc_pool()でラップされています。
+// - さらに、各フレームもalloc_pool()でラップされています。
 
-// This all means that you can't use any memory that you allocated in one scene
-// in another scene and also that you can't use any memory that you allocated in
-// one frame in the next frame.
+// これは、あるシーンで割り当てたメモリを別のシーンで使用することができないこと、
+// また、あるフレームで割り当てたメモリを次のフレームで使用できないことを意味します。
+// 【C言語テクニック】このような寿命管理はリージョンベースのメモリ管理と呼ばれ、
+// ガベージコレクションなしでメモリリークを防ぐ効果的な方法です。
 
-//   2. A temp allocator. This allocates bytes from the end of the hunk. Temp
-// allocated bytes must be explicitly temp_freed() again. As opposed to the bump
-// allocator, the temp allocator can be freed() out of order.
+// 2. 一時アロケータ（テンポラリアロケータ）
+//    ハンクの末尾からバイトを割り当てます。一時割り当てされたバイトは、
+//    明示的にtemp_freed()で解放する必要があります。バンプアロケータとは異なり、
+//    一時アロケータは任意の順序で解放できます。
+//
+//    【C言語テクニック】スタックとヒープの両方の利点を組み合わせた手法です。
+//    スタックの効率性とヒープの柔軟性を兼ね備えています。
 
-// The temp allocator is meant for very short lived objects, to assist data
-// loading. E.g. pixel data from an image file might be temp allocated, handed
-// over to the render (which may pass it on to the GPU or permanently put it in
-// the bump memory) and then immediately free() it again.
+// 一時アロケータは、非常に短命なオブジェクト（データロード支援など）を対象としています。
+// 例えば、画像ファイルからのピクセルデータを一時的に割り当て、レンダラーに渡し
+// （GPUに渡すか、永続的にバンプメモリに配置するかもしれない）、
+// その後すぐにfree()することができます。
 
-// Temp allocations are not allowed to persist. At the end of each frame, the
-// engine checks if the temp allocator is empty - and if not: kills the program.
+// 一時割り当ては永続することは許されません。各フレームの終わりに、
+// エンジンは一時アロケータが空かどうかをチェックし、空でない場合はプログラムを終了します。
+// 【C言語テクニック】これはアサーションの一種で、メモリリークを早期に検出するための
+// デバッグ手法です。
 
-// There's no way to handle an allocation failure. We just kill the program
-// with an error. This is fine if you know all your game data (i.e. levels) in
-// advance. Games that allow loading user defined levels may need a separate 
-// allocation strategy...
+// 割り当て失敗を処理する方法はありません。エラーでプログラムを強制終了するだけです。
+// これはゲームデータ（レベルなど）をすべて事前に把握している場合は問題ありません。
+// ユーザー定義のレベルをロードできるゲームは、別の割り当て戦略が必要かもしれません。
+// 【C言語テクニック】これは「早期失敗（fail fast）」の原則を適用した例です。
 
 #include "types.h"
 
-// The total size of the hunk
+// ハンクの合計サイズ
+// 【C言語テクニック】条件付きコンパイルを使用して、定義されていない場合のみ
+// デフォルト値を設定しています。外部から上書き可能です。
 #if !defined(ALLOC_SIZE)
-	#define ALLOC_SIZE (32 * 1024 * 1024)
+	#define ALLOC_SIZE (32 * 1024 * 1024)  // 32MB
 #endif
 
-// The max number of temp objects to be allocated at a time
+// 一度に割り当てられる一時オブジェクトの最大数
 #if !defined(ALLOC_TEMP_OBJECTS_MAX)
 	#define ALLOC_TEMP_OBJECTS_MAX 8
 #endif
 
 
+// バンプアロケータの現在位置を示すマーク
 typedef struct { uint32_t index; } bump_mark_t;
 
-// Return the current position of the bump allocator
+// バンプアロケータの現在位置を返す
 bump_mark_t bump_mark(void);
 
-// Allocate `size` bytes in bump memory
+// バンプメモリに「size」バイトを割り当てる
+// 【C言語テクニック】void*は汎用ポインタで、任意の型のメモリを扱えます
 void *bump_alloc(uint32_t size);
 
-// Reset the bump allocator to the given position
+// バンプアロケータを指定位置にリセットする
 void bump_reset(bump_mark_t mark);
 
-// Move bytes from temp to bump memory. This is essentially a shorthand for
-// `bump_alloc(); memcpy(); temp_free();` without the requirement to fit both 
-// (temp and bump) into the hunk at the same time.
+// 一時メモリからバンプメモリにバイトを移動する
+// これは本質的に「bump_alloc(); memcpy(); temp_free();」の省略形で、
+// ハンクに両方（tempとbump）を同時に収める必要がありません。
+// 【C言語テクニック】メモリコピーを最適化する手法です
 void *bump_from_temp(void *temp, uint32_t offset, uint32_t size);
 
-// `alloc_pool() { ... }` is a shorthand for `bump_mark()` and `bump_reset()`.
-// You can use this to wrap allocations that you only need momentarily. E.g.:
+// `alloc_pool() { ... }` は `bump_mark()` と `bump_reset()` の省略形です。
+// 一時的にのみ必要な割り当てをラップするために使用できます。例：
 // alloc_pool() {
 //     result = memory_intensive_computation_that_bump_allocates();
 //     do_something(result);
 // }
-// Be careful to NOT `return` from within an `alloc_pool() {...}` - bump_reset() 
-// will not be called if you do. 
-// FIXME: maybe this macro is too error prone and should be removed?
+// 【注意】`alloc_pool() {...}` 内から `return` しないでください - その場合、
+// bump_reset() は呼び出されません。
+// FIXME: このマクロはエラーが発生しやすすぎるので、削除すべきかもしれません？
+//
+// 【C言語テクニック】これはfor文を使った巧妙なマクロで、初期化部でmark取得、
+// 条件部で一度だけ実行の条件、増分部でリセット処理を行っています。
+// __LINE__マクロを使って一意の変数名を生成する手法も使われています。
 #define alloc_pool() \
 	for( \
 		bump_mark_t _bump_mark_##__LINE__ = bump_mark(); \
@@ -84,13 +105,14 @@ void *bump_from_temp(void *temp, uint32_t offset, uint32_t size);
 	)
 
 
-// Allocate `size` bytes in temp memory
+// 一時メモリに「size」バイトを割り当てる
 void *temp_alloc(uint32_t size);
 
-// Free the temp allocation
+// 一時割り当てを解放する
 void temp_free(void *p);
 
-// Check if temp is empty, or die()
+// 一時アロケータが空かどうかをチェックし、空でない場合はプログラム終了
+// 【C言語テクニック】この関数はメモリリーク検出のための安全装置として機能します
 void temp_alloc_check(void);
 
 #endif
