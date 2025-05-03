@@ -4,39 +4,72 @@
 #include "utils.h"
 #include "platform.h"
 
+// Metalレンダラー実装
+// =============================================================================
+// 【初心者向け解説】
+// このファイルは、Apple製品（macOSやiOS）向けのMetalグラフィックスAPIを使用した
+// レンダラーの実装です。Metalはアップルが開発した高性能なグラフィックスAPIで、
+// OpenGLよりも効率的で低レベルなハードウェアアクセスを提供します。
+//
+// 他のレンダラー実装と比較：
+// - OpenGL: 広く使われているクロスプラットフォームなAPI
+// - Metal: Apple製品専用だが高速で効率的
+// - ソフトウェア: 最も互換性があるが性能は低い
+//
+// このファイルはObjective-Cで書かれています（.m拡張子）。これはAppleの
+// フレームワークとの互換性のためです。
+
+// バッファ容量設定
+// -----------------------------------------------------------------------------
 #if !defined(RENDER_BUFFER_CAPACITY)
-	#define RENDER_BUFFER_CAPACITY 2048
+	#define RENDER_BUFFER_CAPACITY 2048  // 一度に描画できる四角形の最大数
 #endif
 
+// ミップマップ設定
+// -----------------------------------------------------------------------------
 #if !defined(RENDER_USE_MIPMAPS)
-	#define RENDER_USE_MIPMAPS 0
+	#define RENDER_USE_MIPMAPS 0  // テクスチャの縮小表示品質向上機能
 #endif
 
+// 必要な環境チェック
+// -----------------------------------------------------------------------------
+// Objective-Cモードでコンパイルする必要がある
 #if !defined(__OBJC__)
 	#error Metal renderer must be compiled in Objective-C mode (-x objective-c).
 #endif
 
+// 自動参照カウント（ARC）が必要
 #if !__has_feature(objc_arc)
 	#error Metal renderer requires Objective-C ARC (-fobjc-arc).
 #endif
 
+// Appleプラットフォーム専用
 #if defined(__APPLE__)
-	#import <CoreGraphics/CoreGraphics.h>
-	#import <Metal/Metal.h>
-	#import <QuartzCore/CAMetalLayer.h>
-	#include <simd/simd.h>
+	// 必要なフレームワークをインポート
+	#import <CoreGraphics/CoreGraphics.h>  // グラフィックス基本機能
+	#import <Metal/Metal.h>                // Metal API
+	#import <QuartzCore/CAMetalLayer.h>    // Metal描画レイヤー
+	#include <simd/simd.h>                 // ベクトル/行列演算用
 #else
 	#error Compiling Metal renderer for non-Apple platform is not supported.
 #endif
 
-// -----------------------------------------------------------------------------
-// Shaders
+// シェーダー定義
+// =============================================================================
+// 【初心者向け解説】
+// シェーダーとは、GPUで実行される小さなプログラムです。
+// Metalでは、これらのプログラムはObjective-CまたはSwiftから呼び出され、
+// グラフィックスハードウェアで実行されて、実際の描画を行います。
 
-// Since we might flush mid-frame (due to a blend state change or texture update,
-// we need to ensure that our instances are aligned to the minimum constant buffer
-// offset alignment of the device, so that we can bind our vertex buffer at the
-// granularity of a single instance. On MTLGPUFamilyMac2, this minimum alignment
-// is 32 bytes.
+// インスタンスアライメント設定
+// -----------------------------------------------------------------------------
+// 【初心者向け解説】
+// フレームの途中でバッファをフラッシュする（描画を実行する）際に、
+// メモリアライメント（メモリ上での配置）が重要になります。
+// 
+// Metalデバイスには最小バッファオフセットアライメント要件があり、
+// 四角形の頂点データを効率的に処理するために、この要件に合わせる必要があります。
+// Mac向けGPUでは、この最小アライメントは32バイトです。
 #define RENDER_INSTANCE_ALIGNMENT 32
 
 static char *const shaderSource = ""
@@ -202,29 +235,54 @@ typedef struct __attribute__((aligned(RENDER_INSTANCE_ALIGNMENT))) {
 	uint32_t textureIndex;
 } quad_instance_t;
 
+// レンダリング関連の定義と変数
+// =============================================================================
+// 【初心者向け解説】
+// ここからは、Metal APIを使用した実際のレンダリング処理に関する定義や変数が
+// 含まれています。これらは、テクスチャ管理、描画命令の発行、画面への表示などを
+// 制御します。
+
+// 特殊テクスチャハンドル
+texture_t RENDER_NO_TEXTURE;             // テクスチャなし（白テクスチャ）
+static texture_t RENDER_BACKBUFFER_TEXTURE;  // バックバッファテクスチャ
+
+// ブレンドモードの数
 // -----------------------------------------------------------------------------
-// Rendering
-
-texture_t RENDER_NO_TEXTURE;
-static texture_t RENDER_BACKBUFFER_TEXTURE;
-
-// This should be kept in sync with the number of blend modes.
+// ブレンドモード数と列挙型の最大値を同期させる
 #define RENDER_BLEND_COUNT (RENDER_BLEND_LIGHTER + 1)
 
-#define MAX_FRAMES_IN_FLIGHT 3
+// 同時処理可能なフレーム数
+// -----------------------------------------------------------------------------
+// 【初心者向け解説】
+// GPUは非同期で動作するため、CPUが次のフレームを準備している間に
+// GPUが前のフレームを処理できるよう、複数のフレームを同時に扱います。
+// これにより、CPUとGPUのリソースを最大限に活用できます。
+#define MAX_FRAMES_IN_FLIGHT 3  // 同時に3フレームまで処理可能
 
+// Metalコンテキスト構造体
+// -----------------------------------------------------------------------------
+// 【初心者向け解説】
+// この構造体は、Metal APIに関連するすべてのオブジェクトを格納します。
+// デバイス、コマンドキュー、シェーダーライブラリ、パイプライン状態など、
+// 描画に必要なすべてのリソースがここに含まれます。
 typedef struct {
-	id<MTLDevice> device;
-	id<MTLCommandQueue> commandQueue;
-	id<MTLLibrary> library;
-	id<MTLRenderPipelineState> mainRenderPipelines[RENDER_BLEND_COUNT];
-	id<MTLRenderPipelineState> postRenderPipelines[RENDER_POST_MAX];
-	id<MTLTexture> textures[RENDER_TEXTURES_MAX];
-	id<MTLSamplerState> sampler;
-	id<MTLBuffer> instanceBuffers[MAX_FRAMES_IN_FLIGHT];
-	id<MTLBuffer> argumentBuffer;
-	id<MTLCommandBuffer> currentCommandBuffer;
-	dispatch_semaphore_t frameSemaphore;
+	id<MTLDevice> device;              // Metalデバイス（GPU）
+	id<MTLCommandQueue> commandQueue;  // コマンドキュー（GPU命令の送信用）
+	id<MTLLibrary> library;            // シェーダーライブラリ
+	
+	// レンダリングパイプライン（シェーダープログラムと状態のセット）
+	id<MTLRenderPipelineState> mainRenderPipelines[RENDER_BLEND_COUNT];  // 通常描画用
+	id<MTLRenderPipelineState> postRenderPipelines[RENDER_POST_MAX];     // ポストエフェクト用
+	
+	// リソース管理
+	id<MTLTexture> textures[RENDER_TEXTURES_MAX];                    // テクスチャ配列
+	id<MTLSamplerState> sampler;                                     // テクスチャサンプラー
+	id<MTLBuffer> instanceBuffers[MAX_FRAMES_IN_FLIGHT];             // インスタンスデータバッファ
+	id<MTLBuffer> argumentBuffer;                                    // 引数バッファ
+	
+	// コマンド管理
+	id<MTLCommandBuffer> currentCommandBuffer;                       // 現在のコマンドバッファ
+	dispatch_semaphore_t frameSemaphore;                            // フレーム同期用セマフォ
 } mtl_ctxt_t;
 
 static mtl_ctxt_t mtl;
@@ -291,39 +349,81 @@ static quad_instance_t *render_alloc_quads(size_t count) {
 	return (quad_instance_t *)([currentInstanceBuffer contents] + instanceOffset);
 }
 
+// Metalレンダラーバックエンドの初期化
+// -----------------------------------------------------------------------------
+// 【初心者向け解説】
+// この関数は、Metalレンダラーの初期化を行います。アプリケーション起動時に
+// 一度だけ呼び出され、描画に必要なすべてのリソースを準備します。
+//
+// Metal APIは、Apple製品のためのモダンなグラフィックスAPIで、
+// 従来のOpenGLよりも低レベルで効率的なハードウェアアクセスを提供します。
 void render_backend_init(void) {
-	mtl.device = MTLCreateSystemDefaultDevice();
-	mtl.commandQueue = [mtl.device newCommandQueue];
-	mtl.currentCommandBuffer = nil;
+	// Metalデバイス（GPU）の取得とコマンドキューの作成
+	// -------------------------
+	// 【初心者向け解説】
+	// Metalデバイスは物理的なGPUを表し、コマンドキューはGPUに送信する命令の列です。
+	mtl.device = MTLCreateSystemDefaultDevice();  // システムのデフォルトGPUを取得
+	mtl.commandQueue = [mtl.device newCommandQueue];  // コマンドキューを作成
+	mtl.currentCommandBuffer = nil;  // コマンドバッファは最初はなし
 
+	// バインドレスレンダリングのサポートチェック
+	// -------------------------
+	// 【初心者向け解説】
+	// 「バインドレスレンダリング」とは、多数のテクスチャを効率的に切り替える
+	// 高度な機能で、このレンダラーには必要です。
 	BOOL supportsBindless = mtl.device.argumentBuffersSupport == MTLArgumentBuffersTier2;
 	error_if(!supportsBindless, "Metal renderer requires support for argument buffers tier 2");
 
+	// 描画レイヤーの設定
+	// -------------------------
+	// 【初心者向け解説】
+	// CAMetalLayerは、Metalで描画した内容を画面に表示するための特殊なレイヤーです。
 	CAMetalLayer *layer = (__bridge CAMetalLayer *)platform_get_metal_layer();
-	layer.device = mtl.device;
-	layer.pixelFormat = renderbufferFormat;
+	layer.device = mtl.device;  // 使用するGPUを指定
+	layer.pixelFormat = renderbufferFormat;  // ピクセル形式を設定（BGRA8）
 
-	MTLCompileOptions *options = [MTLCompileOptions new];
-	options.preprocessorMacros = @{
+	// シェーダーライブラリのコンパイル
+	// -------------------------
+	// 【初心者向け解説】
+	// シェーダーとは、GPUで実行される小さなプログラムです。
+	// ここでは、シェーダーのソースコードをコンパイルしてライブラリとして読み込みます。
+	MTLCompileOptions *options = [MTLCompileOptions new];  // コンパイルオプションを作成
+	options.preprocessorMacros = @{  // プリプロセッサマクロ（定数）を定義
 		@"RENDER_TEXTURES_MAX" : @(RENDER_TEXTURES_MAX),
 		@"RENDER_INSTANCE_ALIGNMENT" : @(RENDER_INSTANCE_ALIGNMENT)
 	};
 	NSError *error = nil;
+	// シェーダーソースからライブラリを作成
 	mtl.library = [mtl.device newLibraryWithSource:[NSString stringWithUTF8String:shaderSource]
 										   options:options
 											 error:&error];
+	// エラーチェック
 	error_if(error != nil, "Error occurred when creating library: %s",
 			 [error.localizedDescription cStringUsingEncoding:NSUTF8StringEncoding]);
 
+	// レンダリングパイプラインの作成
+	// -------------------------
+	// 【初心者向け解説】
+	// パイプラインは、頂点処理、ラスタライズ、フラグメント処理などを含む
+	// 描画処理の全体的な流れを定義します。
 	MTLRenderPipelineDescriptor *pipelineDescriptor = [MTLRenderPipelineDescriptor new];
+	
+	// 頂点シェーダーとフラグメントシェーダーを設定
 	pipelineDescriptor.vertexFunction = [mtl.library newFunctionWithName:@"vertex_main"];
 	pipelineDescriptor.fragmentFunction = [mtl.library newFunctionWithName:@"fragment_main"];
+	
+	// 出力形式とブレンド設定
 	pipelineDescriptor.colorAttachments[0].pixelFormat = renderbufferFormat;
-	pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+	pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;  // 透明度対応
 
+	// 各ブレンドモード用のパイプラインを作成
+	// -------------------------
+	// 【初心者向け解説】
+	// ブレンドモードは、新しいピクセルと既存のピクセルをどのように混合するかを定義します。
+	// 例：通常ブレンド（透明度）、加算ブレンド（光や発光効果）など
 	for (int blendMode = 0; blendMode < RENDER_BLEND_COUNT; ++blendMode) {
 		switch (blendMode) {
-			case RENDER_BLEND_NORMAL:
+			case RENDER_BLEND_NORMAL:  // 通常ブレンド（透明度）
 				pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
 				pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
 				pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
@@ -331,7 +431,7 @@ void render_backend_init(void) {
 				pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
 				pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
 				break;
-			case RENDER_BLEND_LIGHTER:
+			case RENDER_BLEND_LIGHTER:  // 加算ブレンド（光/発光効果）
 				pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
 				pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
 				pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
@@ -341,45 +441,80 @@ void render_backend_init(void) {
 				break;
 		}
 
+		// パイプライン状態オブジェクトを作成
 		mtl.mainRenderPipelines[blendMode] = [mtl.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
 		error_if(error != nil, "Error occurred when creating render pipeline: %s",
 				 [error.localizedDescription cStringUsingEncoding:NSUTF8StringEncoding]);
 	}
 
+	// ポストエフェクトパイプラインの作成
+	// -------------------------
+	// 【初心者向け解説】
+	// ポストエフェクトは、通常の描画が完了した後に画面全体に適用される視覚効果です。
+	// 例：CRTエフェクト（古いテレビ風）、ぼかし、色調補正など
+	
+	// ポストエフェクトはブレンドが不要
 	pipelineDescriptor.colorAttachments[0].blendingEnabled = NO;
 
+	// 標準（エフェクトなし）ポストエフェクト
 	pipelineDescriptor.vertexFunction = [mtl.library newFunctionWithName:@"vertex_post"];
 	pipelineDescriptor.fragmentFunction = [mtl.library newFunctionWithName:@"fragment_post_default"];
 	mtl.postRenderPipelines[RENDER_POST_NONE] = [mtl.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
 	error_if(error != nil, "Error occurred when creating render pipeline: %s",
 			 [error.localizedDescription cStringUsingEncoding:NSUTF8StringEncoding]);
 
+	// CRT（ブラウン管）エフェクト
 	pipelineDescriptor.vertexFunction = [mtl.library newFunctionWithName:@"vertex_post"];
 	pipelineDescriptor.fragmentFunction = [mtl.library newFunctionWithName:@"fragment_post_crt"];
 	mtl.postRenderPipelines[RENDER_POST_CRT] = [mtl.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
 	error_if(error != nil, "Error occurred when creating render pipeline: %s",
 			 [error.localizedDescription cStringUsingEncoding:NSUTF8StringEncoding]);
 
-	// Reserve texture slot for backbuffer
+	// バックバッファテクスチャの予約
+	// -------------------------
+	// 【初心者向け解説】
+	// バックバッファは、画面に表示する前に描画を行う一時的なテクスチャです。
+	// これにより、画面のちらつきを防ぎ、ポストエフェクトの適用も可能になります。
 	RENDER_BACKBUFFER_TEXTURE = (texture_t){ .index = textureCount++ };
 
+	// テクスチャサンプラーの作成
+	// -------------------------
+	// 【初心者向け解説】
+	// サンプラーは、テクスチャから色を取得する方法を定義します。
+	// フィルタリング（補間）や繰り返し設定などを含みます。
 	MTLSamplerDescriptor *samplerDescriptor = [MTLSamplerDescriptor new];
-	samplerDescriptor.sAddressMode = MTLSamplerAddressModeClampToEdge;
-	samplerDescriptor.tAddressMode = MTLSamplerAddressModeClampToEdge;
-	samplerDescriptor.minFilter = MTLSamplerMinMagFilterLinear;
-	samplerDescriptor.magFilter = MTLSamplerMinMagFilterNearest;
+	samplerDescriptor.sAddressMode = MTLSamplerAddressModeClampToEdge;  // 端で繰り返さない
+	samplerDescriptor.tAddressMode = MTLSamplerAddressModeClampToEdge;  // 端で繰り返さない
+	samplerDescriptor.minFilter = MTLSamplerMinMagFilterLinear;         // 縮小時は補間
+	samplerDescriptor.magFilter = MTLSamplerMinMagFilterNearest;        // 拡大時はピクセル化
 	samplerDescriptor.mipFilter = RENDER_USE_MIPMAPS ? MTLSamplerMipFilterLinear : MTLSamplerMipFilterNotMipmapped;
-	samplerDescriptor.supportArgumentBuffers = YES;
+	samplerDescriptor.supportArgumentBuffers = YES;  // 引数バッファでの使用をサポート
 	mtl.sampler = [mtl.device newSamplerStateWithDescriptor:samplerDescriptor];
 
+	// インスタンスバッファの初期割り当て
+	// -------------------------
+	// 【初心者向け解説】
+	// 頂点データを格納するためのメモリ領域を確保します。
 	render_realloc_instance_storage(RENDER_BUFFER_CAPACITY);
 
+	// 引数バッファの作成
+	// -------------------------
+	// 【初心者向け解説】
+	// 引数バッファは、多数のテクスチャをシェーダーに効率的に渡すための
+	// メカニズムです。
 	mtl.argumentBuffer = [mtl.device newBufferWithLength:sizeof(shader_arguments_t)
 												 options:MTLResourceStorageModeShared];
 
+	// 白テクスチャの作成（テクスチャなしの場合に使用）
+	// -------------------------
 	rgba_t white_pixels[4] = {rgba_white(), rgba_white(), rgba_white(), rgba_white()};
 	RENDER_NO_TEXTURE = texture_create(vec2i(2, 2), white_pixels);
 
+	// フレーム同期用セマフォの作成
+	// -------------------------
+	// 【初心者向け解説】
+	// セマフォは同時実行されるフレーム数を制限し、GPU処理の完了を待機するための
+	// 同期メカニズムです。
 	mtl.frameSemaphore = dispatch_semaphore_create(MAX_FRAMES_IN_FLIGHT);
 }
 
