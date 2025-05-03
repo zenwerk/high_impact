@@ -1,77 +1,84 @@
 #ifndef HI_CAMERA_H
 #define HI_CAMERA_H
 
-// A camera allows you to follow entities and move smoothly to a new position.
-// You can also specify a deadzone and lookahead to move the viewport closer
-// to the action. Using a camera is totally optional; you could instead
-// manipulate the engine.viewport directly if you wish.
+// カメラはエンティティを追跡し、新しい位置にスムーズに移動することを可能にします。
+// デッドゾーンやルックアヘッド（先読み）を指定して、ビューポートをアクションに
+// より近づけることもできます。カメラの使用は完全に任意です。もし望むなら、
+// 代わりにengine.viewportを直接操作することもできます。
 
-// Cameras can be instantiated from just a camera_t, i.e.:
-
+// カメラは単にcamera_t構造体からインスタンス化できます：
+// 例：
 // camera_t cam;
 // camera_follow(&cam, some_entity, true);
 
-// To actually move the camera, you have to call camera_update(). This is 
-// typically done once per frame.
+// カメラを実際に動かすには、camera_update()を呼び出す必要があります。
+// これは通常、フレームごとに1回行われます。
 
-// If the engine.collision_map is set, the camera will ensure the screen stays
-// within the bounds of this map.
+// engine.collision_mapが設定されている場合、カメラは画面がこのマップの
+// 境界内に留まるようにします。
 
 #include "types.h"
 #include "entity_def.h"
 
+// カメラ構造体
+// 【C言語テクニック】構造体メンバーへのコメントを付加することで、
+// 自己文書化コードになっています
 typedef struct {
-	// A factor of how fast the camera is moving. Values between 0.5..10
-	// are usually sensible.
+	// カメラの移動速度の係数。0.5〜10の値が適切です。
 	float speed;
 
-	// A fixed offset of the screen center from the target entity.
+	// 対象エンティティからの画面中心の固定オフセット
 	vec2_t offset;
 
-	// Whether to automatically move the bottom of the deadzone up to the
-	// target entity when the target is on_ground
+	// 対象がon_ground（地面に接地）状態のとき、デッドゾーンの
+	// 下部を対象エンティティまで自動的に移動するかどうか
 	bool snap_to_platform;
 
-	// The minimum velocity (in pixels per second) for a camera movement. If 
-	// this is set too low and the camera is close to the target it will move 
-	// very slowly which results in a single pixel movement every few moments, 
-	// which can look weird. 5 looks good, imho.
+	// カメラ移動の最小速度（ピクセル/秒）。
+	// これが低すぎると、カメラが対象に近いときに非常にゆっくり移動し、
+	// 数秒ごとに1ピクセルの動きになり、奇妙に見えることがあります。
+	// 個人的には5が良いと思います。
 	float min_vel;
 
-	// The size of the deadzone: the size of the area around the target within 
-	// which the camera will not move. The camera will move only when the target
-	// is about to leave the deadzone.
+	// デッドゾーンのサイズ：カメラが移動しない対象の周りの領域のサイズ。
+	// カメラは、対象がデッドゾーンから出ようとするときだけ移動します。
+	// 【C言語テクニック】構造体内での論理的なグループ化により、
+	// 関連パラメータが近くに配置されています
 	vec2_t deadzone;
 
-	// The amount of pixels the camera should be ahead the target. Whether the
-	// "ahead" means left/right (or above/below), is determined by the edge of 
-	// the deadzone that the entity touched last.
+	// カメラが対象より先に見るべきピクセル量。「先」が左/右（または上/下）を
+	// 意味するかどうかは、エンティティが最後に触れたデッドゾーンの端によって
+	// 決まります。
 	vec2_t look_ahead;
 
 
-	// Internal state
-	vec2_t deadzone_pos;
-	vec2_t look_ahead_target;
-	entity_ref_t follow;
-	vec2_t pos;
-	vec2_t vel;
+	// 内部状態（外部から直接変更すべきではない）
+	// 【C言語テクニック】内部状態と外部パラメータを論理的に分離しています
+	vec2_t deadzone_pos;      // デッドゾーンの位置
+	vec2_t look_ahead_target; // 先読みターゲット
+	entity_ref_t follow;      // 追跡対象のエンティティ参照
+	vec2_t pos;               // カメラの現在位置
+	vec2_t vel;               // カメラの現在速度
 } camera_t;
 
-// Advance the camera towards its target
+// カメラを対象に向かって進める
+// 【C言語テクニック】関数ポインタや仮想関数テーブルを使わずに、
+// 非オブジェクト指向言語でオブジェクト指向的APIを設計しています
 void camera_update(camera_t *cam);
 
-// Set the camera to pos (no movement)
+// カメラを指定位置に設定（移動なし、瞬間移動）
 void camera_set(camera_t *cam, vec2_t pos);
 
-// Set the target to pos
+// カメラの移動先を設定（徐々に移動）
 void camera_move(camera_t *cam, vec2_t pos);
 
-// Follow an entity. Set snap to true when you want to jump to it. The camera
-// will follow this target for as long as it's alive (or until following 
-// another entity / unfollow)
+// エンティティを追跡する。snapをtrueに設定すると、そのエンティティに
+// 即座にジャンプします。カメラは、このターゲットが生きている限り
+// （または別のエンティティを追跡するまで/追跡解除するまで）追跡し続けます。
+// 【C言語テクニック】boolパラメータを使った動作オプションの切り替え
 void camera_follow(camera_t *cam, entity_ref_t follow, bool snap);
 
-// Stop following the entity
+// エンティティの追跡を停止する
 void camera_unfollow(camera_t *cam);
 
 #endif

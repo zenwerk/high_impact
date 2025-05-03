@@ -1,35 +1,44 @@
 #ifndef HI_INPUT_H
 #define HI_INPUT_H
 
-// This abstract input handling from different input devices to actions. One 
-// ore more keys or buttons can be "bound" to the same action in your game.
+// 入力システム
+// このシステムは異なる入力デバイスからのハンドリングを抽象化してアクションに変換します。
+// ゲーム内の同じアクションに対して、1つ以上のキーやボタンを「バインド」できます。
+// 【C言語テクニック】抽象化レイヤーを使って、低レベルの入力を高レベルのアクションに
+// マッピングしています。これにより、入力デバイスの詳細を気にせずにゲームロジックを
+// 実装できます。
 
 #include "types.h"
 
-// The deadzone in the normalized 0..1 range in which button presses are 
-// ignored. This only takes effect for "analog" input, such as sticks on a game
-// controller.
+// デッドゾーン - 正規化された0〜1の範囲内で、ボタン押下が無視される範囲。
+// これはゲームコントローラーのスティックなどの「アナログ」入力にのみ影響します。
+// 【C言語テクニック】条件付きコンパイルによるデフォルト値の設定
 #if !defined(INPUT_DEADZONE)
-	#define INPUT_DEADZONE 0.1
+	#define INPUT_DEADZONE 0.1  // デフォルトのデッドゾーン値
 #endif
 
-// The deadzone for input_capture()
+// input_capture()用のデッドゾーン
+// キャプチャモードではより大きい値を使用（誤検出防止）
 #if !defined(INPUT_DEADZONE_CAPTURE)
 	#define INPUT_DEADZONE_CAPTURE 0.5
 #endif
 
-// The maximum number of discrete actions
+// 離散アクションの最大数
+// ゲーム内で定義できるアクションの上限
 #if !defined(INPUT_ACTION_MAX)
 	#define INPUT_ACTION_MAX 32
 #endif
 
-#define INPUT_ACTION_NONE 255
-#define INPUT_BUTTON_NONE 0
+// 特殊な定数
+#define INPUT_ACTION_NONE 255  // アクションなし（無効値）
+#define INPUT_BUTTON_NONE 0    // ボタンなし（無効値）
 
-// Key and buttons names for input_bind() 
+// input_bind()用のキーとボタンの名前
+// 【C言語テクニック】入力デバイスを統一された列挙型で表現
+// 値の間隔が空いているのはプラットフォーム固有のキーコードとの互換性のため
 typedef enum {
-	INPUT_INVALID = 0,
-	INPUT_KEY_A = 4,
+	INPUT_INVALID = 0,      // 無効な入力
+	INPUT_KEY_A = 4,        // キーボード A
 	INPUT_KEY_B = 5,
 	INPUT_KEY_C = 6,
 	INPUT_KEY_D = 7,
@@ -134,94 +143,119 @@ typedef enum {
 	INPUT_KEY_R_SHIFT = 105,
 	INPUT_KEY_R_ALT = 106,
 
-	INPUT_KEY_MAX = 107,
+	INPUT_KEY_MAX = 107,         // キーボード入力の最大値
 
-	INPUT_GAMEPAD_A = 108,
-	INPUT_GAMEPAD_Y = 109,
-	INPUT_GAMEPAD_B = 110,
-	INPUT_GAMEPAD_X = 111,
-	INPUT_GAMEPAD_L_SHOULDER = 112,
-	INPUT_GAMEPAD_R_SHOULDER = 113,
-	INPUT_GAMEPAD_L_TRIGGER = 114,
-	INPUT_GAMEPAD_R_TRIGGER = 115,
-	INPUT_GAMEPAD_SELECT = 116,
-	INPUT_GAMEPAD_START = 117,
-	INPUT_GAMEPAD_L_STICK_PRESS = 118,
-	INPUT_GAMEPAD_R_STICK_PRESS = 119,
-	INPUT_GAMEPAD_DPAD_UP = 120,
-	INPUT_GAMEPAD_DPAD_DOWN = 121,
-	INPUT_GAMEPAD_DPAD_LEFT = 122,
-	INPUT_GAMEPAD_DPAD_RIGHT = 123,
-	INPUT_GAMEPAD_HOME = 124,
-	INPUT_GAMEPAD_L_STICK_UP = 125,
-	INPUT_GAMEPAD_L_STICK_DOWN = 126,
-	INPUT_GAMEPAD_L_STICK_LEFT = 127,
-	INPUT_GAMEPAD_L_STICK_RIGHT = 128,
-	INPUT_GAMEPAD_R_STICK_UP = 129,
-	INPUT_GAMEPAD_R_STICK_DOWN = 130,
-	INPUT_GAMEPAD_R_STICK_LEFT = 131,
-	INPUT_GAMEPAD_R_STICK_RIGHT = 132,
+	// ゲームパッド入力
+	INPUT_GAMEPAD_A = 108,         // ゲームパッドAボタン
+	INPUT_GAMEPAD_Y = 109,         // ゲームパッドYボタン
+	INPUT_GAMEPAD_B = 110,         // ゲームパッドBボタン
+	INPUT_GAMEPAD_X = 111,         // ゲームパッドXボタン
+	INPUT_GAMEPAD_L_SHOULDER = 112,// 左ショルダーボタン
+	INPUT_GAMEPAD_R_SHOULDER = 113,// 右ショルダーボタン
+	INPUT_GAMEPAD_L_TRIGGER = 114, // 左トリガー
+	INPUT_GAMEPAD_R_TRIGGER = 115, // 右トリガー
+	INPUT_GAMEPAD_SELECT = 116,    // セレクトボタン
+	INPUT_GAMEPAD_START = 117,     // スタートボタン
+	INPUT_GAMEPAD_L_STICK_PRESS = 118, // 左スティック押し込み
+	INPUT_GAMEPAD_R_STICK_PRESS = 119, // 右スティック押し込み
+	INPUT_GAMEPAD_DPAD_UP = 120,   // 十字キー上
+	INPUT_GAMEPAD_DPAD_DOWN = 121, // 十字キー下
+	INPUT_GAMEPAD_DPAD_LEFT = 122, // 十字キー左
+	INPUT_GAMEPAD_DPAD_RIGHT = 123,// 十字キー右
+	INPUT_GAMEPAD_HOME = 124,      // ホームボタン
+	INPUT_GAMEPAD_L_STICK_UP = 125,    // 左スティック上
+	INPUT_GAMEPAD_L_STICK_DOWN = 126,  // 左スティック下
+	INPUT_GAMEPAD_L_STICK_LEFT = 127,  // 左スティック左
+	INPUT_GAMEPAD_L_STICK_RIGHT = 128, // 左スティック右
+	INPUT_GAMEPAD_R_STICK_UP = 129,    // 右スティック上
+	INPUT_GAMEPAD_R_STICK_DOWN = 130,  // 右スティック下
+	INPUT_GAMEPAD_R_STICK_LEFT = 131,  // 右スティック左
+	INPUT_GAMEPAD_R_STICK_RIGHT = 132, // 右スティック右
 
-	INPUT_MOUSE_LEFT = 134,
-	INPUT_MOUSE_MIDDLE = 135,
-	INPUT_MOUSE_RIGHT = 136,
-	INPUT_MOUSE_WHEEL_UP = 137,
-	INPUT_MOUSE_WHEEL_DOWN = 138,
+	// マウス入力
+	INPUT_MOUSE_LEFT = 134,        // マウス左ボタン
+	INPUT_MOUSE_MIDDLE = 135,      // マウス中ボタン
+	INPUT_MOUSE_RIGHT = 136,       // マウス右ボタン
+	INPUT_MOUSE_WHEEL_UP = 137,    // マウスホイール上
+	INPUT_MOUSE_WHEEL_DOWN = 138,  // マウスホイール下
 
-	INPUT_BUTTON_MAX = 139
+	INPUT_BUTTON_MAX = 139         // 入力の最大数
 } button_t;
 
 
-// Bind a key/button to an action. Multiple buttons can be bound to the same 
-// action, but one key/button can only be bound to one action. Action is just
-// a uint8_t identifier, usually from an enum in your game.
+// キー/ボタンをアクションにバインドする
+// 複数のボタンを同じアクションにバインドできますが、1つのキー/ボタンは
+// 1つのアクションにしかバインドできません。アクションは単なるuint8_t識別子で、
+// 通常はゲーム内で定義した列挙型から値を使用します。
+// 【C言語テクニック】引数としてenumとuint8_tを混在させる柔軟性
 void input_bind(button_t button, uint8_t action);
 
-// Unbind a key/button 
+// キー/ボタンのバインドを解除する
 void input_unbind(button_t button);
 
-// Unbind all keys/buttons
+// すべてのキー/ボタンのバインドを解除する
 void input_unbind_all(void);
 
-// Return the currently bound action for a key/button. Returns INPUT_ACTION_NONE
-// when the button is not bound.
+// キー/ボタンに現在バインドされているアクションを返す
+// ボタンがバインドされていない場合はINPUT_ACTION_NONEを返す
 uint8_t input_action_for_button(button_t button);
 
-// Returns the button_t enum for a given name. See input.c for all possible
-// names. This is useful when e.g. loading a json config file.
+// 名前からbutton_t列挙型を返す
+// すべての可能な名前はinput.cを参照
+// JSONコンフィグファイルなどからの読み込み時に便利
+// 【C言語テクニック】文字列と列挙型の相互変換
 button_t input_name_to_button(const char *name);
 
-// Returns the name of a button.
+// ボタンの名前を返す
 const char *input_button_to_name(button_t button);
 
-// Returns the current state for an action. For discrete buttons and keyboard
-// keys, this is either 0 or 1. For analog input, it is anywhere between
-// INPUT_DEADZONE and 1.
+// アクションの現在の状態を返す
+// 離散的なボタンやキーボードキーの場合、0または1
+// アナログ入力の場合、INPUT_DEADZONE〜1の範囲の値
+// 【C言語テクニック】様々な入力デバイスを統一的なインターフェースで扱う
 float input_state(uint8_t action);
 
-// Whether a button for that action was just pressed down before this frame
+// このフレームの直前にそのアクションのボタンが押されたかどうか
 bool input_pressed(uint8_t action);
 
-// Whether a button for that action was just released before this frame
+// このフレームの直前にそのアクションのボタンが離されたかどうか
 bool input_released(uint8_t action);
 
-// The current mouse position in real pixels
+// 現在のマウス位置（実ピクセル単位）
 vec2_t input_mouse_pos(void);
 
-// Set up a capture callback that will receive ALL key and button presses. For
-// non-text input, ascii_char will be 0. Call input_capture(NULL, NULL) to 
-// uninstall a callback.
+// すべてのキーとボタンの押下を受け取るキャプチャコールバックを設定する
+// テキスト以外の入力の場合、ascii_charは0
+// input_capture(NULL, NULL)を呼び出してコールバックを解除
+// 【C言語テクニック】関数ポインタを使ったコールバックメカニズム
 typedef void(*input_capture_callback_t)
 	(void *user, button_t button, int32_t ascii_char);
 void input_capture(input_capture_callback_t cb, void *user);
 
 
-// Called by the platform
+// プラットフォームによって呼び出される関数
+// 【C言語テクニック】プラットフォーム抽象化レイヤー
+// 以下の関数は通常、ゲームコードから直接呼び出さないでください。
+// これらはプラットフォーム層（SDL、Sokolなど）から呼び出されるためのものです。
+
+// 入力システムの初期化
 void input_init(void);
+
+// 入力システムのクリーンアップ
 void input_cleanup(void);
+
+// 入力状態のクリア（フレーム間で呼び出される）
 void input_clear(void);
+
+// ボタンの状態を設定（プラットフォームからの生の入力）
+// stateは通常0（押されていない）または1（押されている）ですが、
+// アナログスティックなどの場合は0〜1の範囲の値になります
 void input_set_button_state(button_t button, float state);
+
+// マウス位置を設定
 void input_set_mouse_pos(int32_t x, int32_t y);
+
+// テキスト入力ハンドリング（キーボードからの文字入力）
 void input_textinput(int32_t ascii_char);
 
 #endif

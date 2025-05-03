@@ -1,138 +1,158 @@
 #ifndef HI_SOUND_H
 #define HI_SOUND_H
 
-// Sounds are split in two parts: the sound source (sound_source_t) and a "node"
-// (sound_t) representing a currently playing sound, using one of the sources.
+// サウンドシステム
+// サウンドは2つの部分に分かれています：サウンドソース（sound_source_t）と
+// 現在再生中のサウンドを表す「ノード」（sound_t）です。
+// 各ノードはソースのいずれかを使用します。
+// 【C言語テクニック】リソースと再生インスタンスの分離
 
 #include "types.h"
 #include "../libs/pl_synth.h"
 
-// The maximum number of samples for which a sound source is decompressed
-// completely at load time. Everything above this limit will be loaded into 
-// memory in compressed form and only decompressed on demand.
+// サウンドソースが完全に展開されるサンプル数の上限
+// この上限を超えるサンプルは圧縮された形式でメモリに保持され、
+// 必要に応じて展開されます。
+// 【C言語テクニック】メモリ使用効率の最適化
 #if !defined(SOUND_MAX_UNCOMPRESSED_SAMPLES)
 	#define SOUND_MAX_UNCOMPRESSED_SAMPLES (64 * 1024)
 #endif
 
-// The maximum number of sources to be loaded at a time. This only affects
-// memory usage, but not performance.
+// 同時に読み込めるサウンドソースの最大数
+// これはメモリ使用量に影響しますが、パフォーマンスには影響しません。
 #if !defined(SOUND_MAX_SOURCES)
 	#define SOUND_MAX_SOURCES 128
 #endif
 
-// The maximum number of active nodes that can be mixed at time
+// 同時にミックスできるアクティブノードの最大数
+// 【C言語テクニック】リソース制限によるパフォーマンス確保
 #if !defined(SOUND_MAX_NODES)
 	#define SOUND_MAX_NODES 32
 #endif
 
 
+// サウンドソース型（前方宣言）
 typedef struct sound_source_t sound_source_t;
+
+// サウンドノード型（ハンドル）
+// 【C言語テクニック】ハンドルによるリソース参照
 typedef struct { uint16_t id; uint16_t index; } sound_t;
+
+// サウンドマーク型（リソース管理用）
 typedef struct { uint32_t index; } sound_mark_t;
 
-// Initialized the synth for sound_source_from_synth_*()
+// sound_source_from_synth_*()関数用にシンセサイザーを初期化
 void sound_init_synth(void);
 
-// Called by the engine to manage sound memory
+// エンジンによってサウンドメモリを管理するための関数
+// 【C言語テクニック】リソース状態のマーキングとリセット
 sound_mark_t sound_mark(void);
 void sound_reset(sound_mark_t mark);
 
-// Put all playing nodes in a halt state; useful for e.g. a pause screen
+// すべての再生中ノードを一時停止状態にする（ポーズ画面などに便利）
 void sound_halt(void);
 
-// Resume playing all halted sounds
+// 一時停止中のすべてのサウンドを再開する
 void sound_resume(void);
 
-// Return the global volume for all sounds
+// すべてのサウンドのグローバルボリュームを取得
 float sound_global_volume(void);
 
-// Set the global volume for all nodes
+// すべてのノードのグローバルボリュームを設定
 void sound_set_global_volume(float volume);
 
-// Periodically called by the platform to mix playing nodes into output buffer
+// プラットフォームから定期的に呼び出され、再生中のノードを出力バッファにミックス
+// 【C言語テクニック】オーディオバッファへのミキシング
 void sound_mix_stereo(float *dest_samples, uint32_t dest_len);
 
-// Load a sound source from a QOA file. Calling this function multiple times with
-// the same path will return the same, cached sound source,
+// QOAファイルからサウンドソースを読み込む
+// 同じパスで複数回呼び出すと、同じキャッシュされたサウンドソースを返す
+// 【C言語テクニック】リソースキャッシング
 sound_source_t *sound_source(char *path);
 
-// Initialize a sound source from raw samples. No ownership of the samples is
-// taken; they are not copied.
+// 生のサンプルからサウンドソースを初期化
+// サンプルの所有権は取得されず、コピーもされない
 sound_source_t *sound_source_with_samples(int16_t *samples, uint32_t len, uint32_t channels, uint32_t samplerate);
 
-// Create a sound source with the given pl_synth_sound_t definition
+// 指定されたpl_synth_sound_t定義でサウンドソースを作成
+// 【C言語テクニック】プロシージャル生成サウンド
 sound_source_t *sound_source_synth_sound(pl_synth_sound_t *sound);
 
-// Create a sound source with the given pl_synth_song_t definition
+// 指定されたpl_synth_song_t定義でサウンドソースを作成
 sound_source_t *sound_source_synth_song(pl_synth_song_t *song);
 
-// Return the duration of a sound source
+// サウンドソースの再生時間（秒）を返す
 float sound_source_duration(sound_source_t *source);
 
-// Obtain a free node for the given source. This will "reserve" the source. It 
-// can not be re-used until it is disposed via sound_dispose(). The node will be
-// in a paused state and must be explicitly unpaused. Returns an invalid node
-// with id = 0 when no free node is available.
+// 指定されたソースの空きノードを取得する
+// これによりソースが「予約」され、sound_dispose()で解放されるまで再利用できなくなる
+// ノードは一時停止状態になり、明示的に再開する必要がある
+// 空きノードがない場合はid = 0の無効なノードを返す
+// 【C言語テクニック】オブジェクトプールとリソース予約
 sound_t sound(sound_source_t *source);
 
-// Play a sound source. The node used to play it will be automatically disposed
-// once it has played through.
+// サウンドソースを再生する
+// 再生に使用されるノードは再生終了後に自動的に破棄される
+// 【C言語テクニック】簡易インターフェース
 void sound_play(sound_source_t *source);
 
-// Play a sound source with the given volume, pan and pitch. The node used to 
-// play it will be automatically disposed once it has played through.
+// 指定されたボリューム、パン、ピッチでサウンドソースを再生する
+// 再生に使用されるノードは再生終了後に自動的に破棄される
+// 【C言語テクニック】拡張パラメータによる柔軟性
 void sound_play_ex(sound_source_t *source, float volume, float pan, float pitch);
 
-// Unpauses a paused node
+// 一時停止中のノードを再開する
 void sound_unpause(sound_t sound);
 
-// Pauses a node
+// ノードを一時停止する
 void sound_pause(sound_t sound);
 
-// Pauses a node and rewind it to the start
+// ノードを一時停止して先頭に巻き戻す
 void sound_stop(sound_t sound);
 
-// Dispose this node. The node is invalid afterwards, but will still play to the
-// end if it's not paused.
+// このノードを破棄する
+// 破棄後、ノードは無効になるが、一時停止されていなければ最後まで再生される
+// 【C言語テクニック】リソース解放と自動再生管理
 void sound_dispose(sound_t sound);
 
-// Return whether this node loops
+// このノードがループするかどうかを返す
 bool sound_loop(sound_t sound);
 
-// Set whether to loop this node
+// このノードをループするかどうかを設定する
 void sound_set_loop(sound_t sound, bool loop);
 
-// Return the duration in seconds of the underlying sound source. This does not
-// take the node's current pitch into account
+// 基となるサウンドソースの再生時間（秒）を返す
+// ノードの現在のピッチは考慮されない
 float sound_duration(sound_t sound);
 
-// Return the current position of this node in seconds. This does not take the 
-// node's current pitch into account
+// ノードの現在の位置（秒）を返す
+// ノードの現在のピッチは考慮されない
 float sound_time(sound_t sound);
 
-// Set the current position of this node in seconds. This does not take the 
-// node's current pitch into account
+// ノードの現在の位置（秒）を設定する
+// ノードの現在のピッチは考慮されない
 void sound_set_time(sound_t sound, float time);
 
-// Return the current volume of this node
+// ノードの現在のボリュームを返す
 float sound_volume(sound_t sound);
 
-// Set the current volume of this node
+// ノードの現在のボリュームを設定する
 void sound_set_volume(sound_t sound, float volume);
 
-// Return the current pan of the node (-1 = left, 0 = center, 1 = right)
+// ノードの現在のパン位置を返す（-1 = 左, 0 = 中央, 1 = 右）
 float sound_pan(sound_t sound);
 
-// Return the current pan of a the node
+// ノードの現在のパン位置を設定する
 void sound_set_pan(sound_t sound, float pan);
 
-// Return the current pitch (playback speed) of this node. Default 1.
+// ノードの現在のピッチ（再生速度）を返す。デフォルトは1
 float sound_pitch(sound_t sound);
 
-// Set the current pitch (playback speed) of this node
+// ノードの現在のピッチ（再生速度）を設定する
 void sound_set_pitch(sound_t sound, float pitch);
 
-// Called by the platform
+// プラットフォームによって呼び出される初期化・クリーンアップ関数
+// 【C言語テクニック】プラットフォーム層とのインターフェース
 void sound_init(int samplerate);
 void sound_cleanup(void);
 

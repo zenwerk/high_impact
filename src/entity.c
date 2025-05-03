@@ -7,44 +7,57 @@
 #include "platform.h"
 
 
+// エンティティタイプ名を列挙型からストリングに変換するマクロ
+// 【C言語テクニック】マクロを使用して列挙型の文字列表現を生成
 #define ENTITY_STRINGIFY_NAME(ENUM, NAME) [ENUM] = #NAME,
+
+// エンティティタイプ名の配列（デバッグや検索用）
 static const char *entity_type_names[] = {
-	ENTITY_TYPES(ENTITY_STRINGIFY_NAME)
+	ENTITY_TYPES(ENTITY_STRINGIFY_NAME)  // X-マクロを使用して自動生成
 };
 
+// すべてのエンティティタイプの仮想関数テーブル
 entity_vtab_t entity_vtab[ENTITY_TYPES_COUNT];
 
-static uint32_t entities_len = 0;
-static uint16_t entity_unique_id = 0;
-static entity_t *entities[ENTITIES_MAX];
-static entity_t entities_storage[ENTITIES_MAX];
+// エンティティシステムのグローバル状態
+static uint32_t entities_len = 0;          // 現在のエンティティ数
+static uint16_t entity_unique_id = 0;      // エンティティに割り当てる一意のID
+static entity_t *entities[ENTITIES_MAX];   // アクティブなエンティティへのポインタ配列
+static entity_t entities_storage[ENTITIES_MAX];  // 実際のエンティティストレージ
 
-static void entity_move(entity_t *self, vec2_t vstep);
-static void entity_handle_trace_result(entity_t *self, trace_t *t);
-static void entity_resolve_collision(entity_t *a, entity_t *b);
-static void entities_separate_on_x_axis(entity_t *left, entity_t *right, float left_move, float right_move, float overlap);
-static void entities_separate_on_y_axis(entity_t *top, entity_t *bottom, float top_move, float bottom_move, float overlap);
+// エンティティ物理処理の内部関数（前方宣言）
+static void entity_move(entity_t *self, vec2_t vstep);  // エンティティを移動し衝突をチェック
+static void entity_handle_trace_result(entity_t *self, trace_t *t);  // トレース結果を処理
+static void entity_resolve_collision(entity_t *a, entity_t *b);  // エンティティ間の衝突を解決
+static void entities_separate_on_x_axis(entity_t *left, entity_t *right, float left_move, float right_move, float overlap);  // X軸方向の分離
+static void entities_separate_on_y_axis(entity_t *top, entity_t *bottom, float top_move, float bottom_move, float overlap);  // Y軸方向の分離
 
 
-static void noop_load(void) {}
-static void noop_init(entity_t *self) {}
-static void noop_kill(entity_t *self) {}
-static void noop_settings(entity_t *self, json_t *def) {}
-static void noop_touch(entity_t *self, entity_t *other) {}
-static void noop_collide(entity_t *self, vec2_t normal, trace_t *trace) {}
-static void noop_trigger(entity_t *self, entity_t *other) {}
-static void noop_message(entity_t *self, entity_message_t message, void *data) {}
+// 【C言語テクニック】空の実装（no-operation）を提供する関数群
+// これにより、関数ポインタのNULLチェックを毎回行う必要がなくなり、パフォーマンスが向上
+static void noop_load(void) {}  // 何もしないロード関数
+static void noop_init(entity_t *self) {}  // 何もしない初期化関数
+static void noop_kill(entity_t *self) {}  // 何もしない削除関数
+static void noop_settings(entity_t *self, json_t *def) {}  // 何もしない設定関数
+static void noop_touch(entity_t *self, entity_t *other) {}  // 何もしないタッチ関数
+static void noop_collide(entity_t *self, vec2_t normal, trace_t *trace) {}  // 何もしない衝突関数
+static void noop_trigger(entity_t *self, entity_t *other) {}  // 何もしないトリガー関数
+static void noop_message(entity_t *self, entity_message_t message, void *data) {}  // 何もしないメッセージ関数
 
 void entities_init(void) {
-	// Set up the vtab for all entity types and provide default implementations
-	// for functions that are not overridden. Some of the defaults are a simple
-	// no-op. This is a tiny bit faster than checking if the function pointer
-	// is NULL each time before invocation.
+	// すべてのエンティティタイプのvtabを設定し、オーバーライドされていない関数に
+	// デフォルト実装を提供します。一部のデフォルトは単純なno-opです。
+	// これは、呼び出し前に毎回関数ポインタがNULLかどうかをチェックするよりも
+	// わずかに高速です。
+	//
+	// 【C言語テクニック】X-マクロパターンを使用して外部定義された仮想関数テーブルを自動的にロード
 	#define ENTITY_INIT_VTAB(ENUM, NAME) \
 		extern entity_vtab_t entity_vtab_##NAME; \
 		entity_vtab[ENUM] = entity_vtab_##NAME;
 	ENTITY_TYPES(ENTITY_INIT_VTAB)
 
+	// 定義されていない関数ポインタをno-op関数で埋める
+	// 【C言語テクニック】NULLポインタを空関数で置き換えることで、呼び出し時のチェックを省略
 	for (uint32_t i = 0; i < ENTITY_TYPES_COUNT; i++) {
 		if (!entity_vtab[i].load)     { entity_vtab[i].load = noop_load; }
 		if (!entity_vtab[i].init)     { entity_vtab[i].init = noop_init; }
@@ -334,48 +347,73 @@ vec2_t entity_center(entity_t *ent) {
 	return vec2_add(ent->pos, vec2_mulf(ent->size, 0.5));
 }
 
+// 2つのエンティティ間の距離を計算
 float entity_dist(entity_t *a, entity_t *b) {
+	// 両方のエンティティの中心点間の距離を返す
 	return vec2_dist(entity_center(a), entity_center(b));
 }
 
+// 2つのエンティティ間の角度（ラジアン）を計算
 float entity_angle(entity_t *a, entity_t *b) {
+	// aからbへの方向角度を返す
 	return vec2_angle(entity_center(a), entity_center(b));
 }
 
+// エンティティにダメージを与える基本実装
 void entity_base_damage(entity_t *self, entity_t *other, float damage) {
+	// ヘルスからダメージを引く
 	self->health -= damage;
 
+	// ヘルスが0以下になった場合、まだ生きていればエンティティを削除
 	if (self->health <= 0 && self->is_alive) {
 		entity_kill(self);
 	}
 }
 
+// エンティティの基本描画関数
 void entity_base_draw(entity_t *self, vec2_t viewport) {
+	// アニメーションが設定されている場合のみ描画
 	if (self->anim.def != NULL) {
+		// エンティティの位置からビューポートをオフセットして描画位置を計算
+		// 【C言語テクニック】複数のベクトル操作を一行で連鎖させる関数型スタイル
 		anim_draw(&self->anim, vec2_sub(vec2_sub(self->pos, viewport), self->offset));
 	}
 }
 
+// エンティティの基本更新関数（物理と移動）
 void entity_base_update(entity_t *self) {
+	// 移動物理が無効な場合は早期リターン
 	if (!(self->physics & ENTITY_PHYSICS_MOVE)) {
 		return;
 	}
 
-	// Integrate velocity
-	vec2_t v = self->vel;
+	// 速度を積分
+	// 【C言語テクニック】シンプルなオイラー積分法による物理シミュレーション
+	vec2_t v = self->vel;  // 現在の速度を保存
 
+	// 重力を適用（Y方向のみ）
 	self->vel.y += engine.gravity * self->gravity * engine.tick;
+	
+	// 摩擦係数を計算（時間に基づく制限付き）
 	vec2_t friction = vec2(min(self->friction.x * engine.tick, 1), min(self->friction.y * engine.tick, 1));
+	
+	// 速度を更新：加速度を加え、摩擦を引く
+	// 【C言語テクニック】複雑なベクトル計算を読みやすく構造化
 	self->vel = vec2_add(
 		self->vel, 
 		vec2_sub(
-			vec2_mulf(self->accel, engine.tick),
-			vec2_mul(self->vel, friction)
+			vec2_mulf(self->accel, engine.tick),  // 加速度による速度増加
+			vec2_mul(self->vel, friction)         // 摩擦による速度減少
 		)
 	);
 
+	// 移動ステップを計算（台形積分法の近似）
 	vec2_t vstep = vec2_mulf(vec2_add(v, self->vel), engine.tick * 0.5);
+	
+	// 接地状態をリセット（移動後に再計算）
 	self->on_ground = false;
+	
+	// エンティティを実際に移動（衝突判定も行う）
 	entity_move(self, vstep);
 }
 
