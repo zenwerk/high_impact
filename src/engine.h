@@ -1,48 +1,47 @@
 #ifndef HI_ENGINE_H
 #define HI_ENGINE_H
 
-// The engine is the main wrapper around your game. For every frame, it will 
-// update your scene, update all entities and draw the whole frame.
+// エンジンはゲームの中心的な機能です。毎フレーム、シーンを更新し、
+// すべてのエンティティを更新し、画面全体を描画します。
 
-// The engine takes care of timekeeping, a number background maps, a collision 
-// map and some more global state. There's only one engine_t instance in 
-// high_impact and it's globally available at `engine`
+// エンジンは時間管理、複数の背景マップ、コリジョンマップ、
+// その他のグローバル状態を管理します。high_impactでは、engine_tの
+// インスタンスは1つだけで、グローバル変数`engine`として利用できます。
 
 #include "types.h"
 #include "map.h"
 
 
-// The maximum difference in seconds from one frame to the next. If the 
-// difference  is larger than this, the game will slow down instead of having
-// imprecise large time steps.
+// 1フレームから次のフレームまでの最大時間差（秒）。
+// この値を超える場合、不正確な大きな時間ステップを避けるために
+// ゲームは遅くなります。
 #if !defined(ENGINE_MAX_TICK)
 	#define ENGINE_MAX_TICK 0.1
 #endif
 
-// The maximum number of background maps
+// 背景マップの最大数
 #if !defined(ENGINE_MAX_BACKGROUND_MAPS)
 	#define ENGINE_MAX_BACKGROUND_MAPS 4
 #endif
 
 
-// Every scene in your game must provide a scene_t that specifies it's entry
-// functions.
+// ゲーム内の各シーンは、そのエントリー関数を指定するscene_tを提供する必要があります。
 typedef struct {
-	// Called once when the scene is set. Use it to load resources and 
-	// instantiate your initial entities
+	// シーンが設定されたときに1回呼び出されます。リソースをロードし、
+	// 初期エンティティをインスタンス化するために使用します。
 	void (*init)(void);
 
-	// Called once per frame. Uss this to update logic specific to your game.
-	// If you use this function, you probably want to call scene_base_update()
-	// in it somewhere.
+	// フレームごとに1回呼び出されます。ゲーム固有のロジックを更新するために
+	// 使用します。この関数を使用する場合は、どこかでscene_base_update()を
+	// 呼び出す必要があるでしょう。
 	void (*update)(void);
 
-	// Called once per frame. Use this to e.g. draw a background or hud.
-	// If you use this function, you probably want to call scene_base_draw()
-	// in it somewhere.
+	// フレームごとに1回呼び出されます。背景やHUDなどを描画するために
+	// 使用します。この関数を使用する場合は、どこかでscene_base_draw()を
+	// 呼び出す必要があるでしょう。
 	void (*draw)(void);
 
-	// Called once before the next scene is set or the game ends
+	// 次のシーンが設定されるか、ゲームが終了する前に1回呼び出されます。
 	void (*cleanup)(void);
 } scene_t;
 

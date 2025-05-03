@@ -1,8 +1,8 @@
 #ifndef HI_TYPES_H
 #define HI_TYPES_H
 
-// Various types and accompanying functions
-// TODO: documentation
+// 様々な型と付随する関数
+// TODO: ドキュメント化
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -10,54 +10,66 @@
 #include <stdlib.h>
 #include <math.h>
 
+// M_PIが定義されていない場合の対策
 #if !defined(M_PI)
     #define M_PI 3.14159265358979323846
 #endif
 
+// ベクトル比較の際の微小誤差の許容値
 #define VEC2_EQ_EPSILON 0.0001
 
+// 2次元の浮動小数点ベクトル型
 typedef struct {
-	float x, y;
+	float x, y;  // x, y座標
 } vec2_t;
 
+// 2次元の整数ベクトル型
 typedef struct {
-	int x, y;
+	int x, y;    // x, y座標（整数）
 } vec2i_t;
 
+// 3x3変換行列型（2D変換用）
 typedef struct {
-	float a, b, c, d, tx, ty;
+	float a, b, c, d, tx, ty;  // 2D変換行列の要素
 } mat3_t;
 
+// RGBA色表現のための共用体型
 typedef union rgba_t {
 	struct {
-		uint8_t r, g, b, a;
+		uint8_t r, g, b, a;    // 赤、緑、青、アルファの各成分
 	};
-	uint8_t components[4];
-	uint32_t v;
+	uint8_t components[4];     // 配列としてのアクセス用
+	uint32_t v;                // 32ビット整数としてのアクセス用
 } rgba_t;
 
-#define vec2(X, Y) ((vec2_t){.x = X, .y = Y})
-#define vec2i(X, Y) ((vec2i_t){.x = X, .y = Y})
-#define mat3(a, b, c, d, tx, ty) (mat3_t){a, b, c, d, tx, ty}
-#define mat3_identity() mat3(1,0,0,1,0,0)
-#define rgba(R, G, B, A) ((rgba_t){.r = R, .g = G, .b = B, .a = A})
-#define rgba_white() ((rgba_t){.v = 0xffffffff})
+// ベクトル作成用マクロ
+#define vec2(X, Y) ((vec2_t){.x = X, .y = Y})         // 浮動小数点ベクトル作成
+#define vec2i(X, Y) ((vec2i_t){.x = X, .y = Y})       // 整数ベクトル作成
 
-static inline vec2_t vec2_from_vec2i(vec2i_t a)     { return vec2(a.x, a.y); }
-static inline vec2_t vec2_from_angle(float a)       { return vec2(cosf(a), sinf(a));}
-static inline float  vec2_to_angle(vec2_t a)        { return atan2(a.y, a.x); }
-static inline vec2_t vec2_add(vec2_t a, vec2_t b)   { return vec2(a.x + b.x, a.y + b.y); }
-static inline vec2_t vec2_sub(vec2_t a, vec2_t b)   { return vec2(a.x - b.x, a.y - b.y); }
-static inline vec2_t vec2_mulf(vec2_t a, float f)   { return vec2(a.x * f, a.y * f); }
-static inline vec2_t vec2_divf(vec2_t a, float f)   { return vec2(a.x / f, a.y / f); }
-static inline vec2_t vec2_mul(vec2_t a, vec2_t b)   { return vec2(a.x * b.x, a.y * b.y); }
-static inline vec2_t vec2_div(vec2_t a, vec2_t b)   { return vec2(a.x / b.x, a.y / b.y); }
-static inline vec2_t vec2_abs(vec2_t a)             { return vec2(fabsf(a.x), fabsf(a.y)); }
-static inline float  vec2_len(vec2_t a)             { return sqrtf(a.x * a.x + a.y * a.y); }
-static inline float  vec2_dist(vec2_t a, vec2_t b)  { return vec2_len(vec2_sub(a, b)); }
-static inline float  vec2_dot(vec2_t a, vec2_t b)   { return a.x * b.x + a.y * b.y; }
-static inline float  vec2_cross(vec2_t a, vec2_t b) { return a.x * b.y - a.y * b.x; }
-static inline bool   vec2_eq(vec2_t a, vec2_t b)    { return fabsf(a.x - b.x) + fabsf(a.y - b.y) < VEC2_EQ_EPSILON; }
+// 行列作成用マクロ
+#define mat3(a, b, c, d, tx, ty) (mat3_t){a, b, c, d, tx, ty}  // 変換行列作成
+#define mat3_identity() mat3(1,0,0,1,0,0)                      // 単位行列作成
+
+// 色作成用マクロ
+#define rgba(R, G, B, A) ((rgba_t){.r = R, .g = G, .b = B, .a = A})  // RGBA色作成
+#define rgba_white() ((rgba_t){.v = 0xffffffff})                     // 白色作成
+
+// vec2_t用の各種ユーティリティ関数（すべてinline）
+static inline vec2_t vec2_from_vec2i(vec2i_t a)     { return vec2(a.x, a.y); }             // 整数ベクトルから浮動小数点ベクトルへ変換
+static inline vec2_t vec2_from_angle(float a)       { return vec2(cosf(a), sinf(a));}      // 角度からベクトルを作成
+static inline float  vec2_to_angle(vec2_t a)        { return atan2(a.y, a.x); }            // ベクトルから角度を取得
+static inline vec2_t vec2_add(vec2_t a, vec2_t b)   { return vec2(a.x + b.x, a.y + b.y); } // ベクトル加算
+static inline vec2_t vec2_sub(vec2_t a, vec2_t b)   { return vec2(a.x - b.x, a.y - b.y); } // ベクトル減算
+static inline vec2_t vec2_mulf(vec2_t a, float f)   { return vec2(a.x * f, a.y * f); }     // ベクトルをスカラー倍
+static inline vec2_t vec2_divf(vec2_t a, float f)   { return vec2(a.x / f, a.y / f); }     // ベクトルをスカラーで除算
+static inline vec2_t vec2_mul(vec2_t a, vec2_t b)   { return vec2(a.x * b.x, a.y * b.y); } // ベクトル要素同士の積（成分ごと）
+static inline vec2_t vec2_div(vec2_t a, vec2_t b)   { return vec2(a.x / b.x, a.y / b.y); } // ベクトル要素同士の商（成分ごと）
+static inline vec2_t vec2_abs(vec2_t a)             { return vec2(fabsf(a.x), fabsf(a.y)); } // ベクトルの絶対値
+static inline float  vec2_len(vec2_t a)             { return sqrtf(a.x * a.x + a.y * a.y); } // ベクトルの長さ
+static inline float  vec2_dist(vec2_t a, vec2_t b)  { return vec2_len(vec2_sub(a, b)); }   // 2点間の距離
+static inline float  vec2_dot(vec2_t a, vec2_t b)   { return a.x * b.x + a.y * b.y; }      // ベクトルの内積
+static inline float  vec2_cross(vec2_t a, vec2_t b) { return a.x * b.y - a.y * b.x; }      // ベクトルの外積（z成分）
+static inline bool   vec2_eq(vec2_t a, vec2_t b)    { return fabsf(a.x - b.x) + fabsf(a.y - b.y) < VEC2_EQ_EPSILON; } // ベクトルが近似的に等しいか
 
 static inline vec2i_t vec2i_from_vec2(vec2_t a)       { return vec2i(a.x, a.y); }
 static inline vec2i_t vec2i_add(vec2i_t a, vec2i_t b) { return vec2i(a.x + b.x, a.y + b.y); }

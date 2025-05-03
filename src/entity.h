@@ -1,15 +1,15 @@
 #ifndef HI_ENTITY_H
 #define HI_ENTITY_H
 
-// Every dynamic object in your game is an "entity". Entities are updated and
-// drawn once per frame. You can overwrite various default functions of entity
-// with your own, entity specific, implementation.
+// ゲーム内の全ての動的オブジェクトは「エンティティ」です。エンティティは
+// フレームごとに1回更新され、描画されます。エンティティのデフォルト関数を
+// 独自の実装で上書きすることができます。
 
-// !! Before you include this header, you have to define your entity_t struct,
-// (through the ENTITY_DEFINE() macro), your entity_message_t enum and the 
-// ENTITY_TYPES() X-Macro with all your entity types.
+// !! このヘッダーをインクルードする前に、entity_t構造体（ENTITY_DEFINE()
+// マクロを使用して）、entity_message_t列挙型、およびすべてのエンティティ
+// タイプを含むENTITY_TYPES() X-Macroを定義する必要があります。
 
-// See entity_def.h for the basic struct that is used by ENTITY_DEFINE()
+// ENTITY_DEFINE()で使用される基本構造体については、entity_def.hを参照してください。
 
 #include "types.h"
 #include "trace.h"
@@ -17,13 +17,14 @@
 #include "../libs/pl_json.h"
 
 
-// Trigger compilation errors if any of the required #defines or typedefs are
-// not defined.
+// 必要な#definesまたはtypedefが定義されていない場合、
+// コンパイルエラーをトリガーします。
 
 #ifndef ENTITY_TYPES
 	#error "#define the X-macro ENTITY_TYPES() before including entity.h"
 #endif
 
+// 型が定義されているかを確認するためのコンパイル時チェック
 struct _entity_assert_types_defined {
 	entity_t CALLL_ENTITY__DEFINE_BEFORE__INCLUDING_ENTITY_H;
 	entity_message_t DEFINE_ENUM__entity_message_t__BEFORE_INCLUDING_ENTITY_H;
@@ -57,53 +58,54 @@ struct _entity_assert_types_defined {
 	#define ENTITY_SWEEP_AXIS x
 #endif
 
-// The entity_vtab_t struct must implemented by all your entity types. It holds
-// the functions to call for each entity type. All of these are optional. In
-// the simplest case you just have a global:
+// entity_vtab_t構造体はすべてのエンティティタイプで実装する必要があります。
+// 各エンティティタイプのために呼び出す関数を保持します。これらはすべてオプションです。
+// 最も単純な場合、次のようなグローバル変数を宣言するだけです：
 // entity_vtab_t entity_vtab_mytype = {};
 typedef struct {
-	// Called once at program start, just before main_init(). Use this to
-	// load assets and animations for your entity types.
+	// プログラム開始時に一度だけ呼び出されます（main_init()の直前）。
+	// エンティティタイプのアセットとアニメーションをロードするために使用します。
 	void (*load)(void);
 
-	// Called once for each entity, when the entity is created through
-	// entity_spawn(). Use this to set all properties (size, offset, animation)
-	// of your entity.
+	// エンティティがentity_spawn()を通じて作成されるとき、
+	// 各エンティティに対して一度だけ呼び出されます。
+	// エンティティのすべてのプロパティ（サイズ、オフセット、アニメーション）を
+	// 設定するために使用します。
 	void (*init)(entity_t *self);
 
-	// Called once after engine_load_level() when all entities have been 
-	// spawned. The json_t *def contains the "settings" of the entity from the
-	// level json.
+	// engine_load_level()の後、すべてのエンティティが生成された後に一度だけ
+	// 呼び出されます。json_t *defにはレベルJSONからの「settings」が含まれています。
 	void (*settings)(entity_t *self, json_t *def);
 
-	// Called once per frame for each entity. The default entity_update_base()
-	// moves the entity according to its physics
+	// フレームごとに各エンティティに対して一度だけ呼び出されます。
+	// デフォルトのentity_update_base()は物理特性に従ってエンティティを移動させます。
 	void (*update)(entity_t *self);
 
-	// Called once per frame for each entity. The default entity_draw_base()
-	// draws the entity->anim 
+	// フレームごとに各エンティティに対して一度だけ呼び出されます。
+	// デフォルトのentity_draw_base()はentity->animを描画します。
 	void (*draw)(entity_t *self, vec2_t viewport);
 
-	// Called when the entity is removed from the game through entity_kill()
+	// エンティティがentity_kill()を通じてゲームから削除されるときに呼び出されます。
 	void (*kill)(entity_t *self);
 
-	// Called when this entity touches another entity, according to 
-	// entity->check_against
+	// entity->check_againstに従って、このエンティティが他のエンティティに
+	// 接触したときに呼び出されます。
 	void (*touch)(entity_t *self, entity_t *other);
 
-	// Called when the entity collides with the game world or another entity
-	// Careful: the trace will only be set from a game world collision. It will
-	// be NULL for a collision with another entity.
+	// エンティティがゲーム世界または他のエンティティと衝突したときに呼び出されます。
+	// 注意：traceはゲーム世界との衝突からのみ設定されます。他のエンティティとの
+	// 衝突の場合はNULLになります。
 	void (*collide)(entity_t *self, vec2_t normal, trace_t *trace);
 
-	// Called through entity_damage(). The default entity_base_damage() deducts
-	// damage from the entity's health and calls entity_kill() if it's <= 0.
+	// entity_damage()を通じて呼び出されます。デフォルトのentity_base_damage()は
+	// エンティティのヘルスからダメージを差し引き、ヘルスが0以下になると
+	// entity_kill()を呼び出します。
 	void (*damage)(entity_t *self, entity_t *other, float damage);
 
-	// Called through entity_trigger()
+	// entity_trigger()を通じて呼び出されます
 	void (*trigger)(entity_t *self, entity_t *other);
 
-	// Called through entity_message()
+	// entity_message()を通じて呼び出されます
 	void (*message)(entity_t *self, entity_message_t message, void *data);
 } entity_vtab_t;
 
