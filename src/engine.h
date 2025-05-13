@@ -46,17 +46,18 @@ typedef struct {
 } scene_t;
 
 typedef struct {
-	// The real time in seconds since program start
+	// プログラムが起動してからの実時間
 	double time_real;
 
-	// The game time in seconds since scene start
+	// 現在のシーンが開始してからのゲーム時間
 	double time;
 
-	// A global multiplier for how fast game time should advance. Default: 1.0
+	// ゲーム時間をどれだけ速く進めるかのグローバルな倍率. デフォルト:1.0
 	double time_scale;
 
 	// The time difference in seconds from the last frame to the current. 
 	// Typically 0.01666 (assuming 60hz)
+	// 最後のフレームから現在までの時間差（秒）。通常は0.01666（60Hzを想定）
 	double tick;
 
 	// The frame number in this current scene. Increases by 1 for every frame.
@@ -64,23 +65,27 @@ typedef struct {
 
 	// The map to use for entity vs. world collisions. Reset for each scene.
 	// Use engine_set_collision_map() to set it.
+	// エンティティ対ワールドの衝突に使用するマップ. シーンごとにリセットされる. 設定するにはengine_set_collision_map()を使う.
 	map_t *collision_map;
 
-	// The maps to draw. Reset for each scene. Use engine_add_background_map()
-	// to add.
+	// The maps to draw. Reset for each scene. Use engine_add_background_map() to add.
+	// 描画するマップ. シーンごとにリセットする. 追加するにはengine_add_background_map()を使う.
 	map_t *background_maps[ENGINE_MAX_BACKGROUND_MAPS];
 	uint32_t background_maps_len;
 
 	// A global multiplier that affects the gravity of all entities. This only
 	// makes sense for side view games. For a top-down game you'd want to have 
 	// it at 0.0. Default: 1.0
+	// すべてのエンティティの重力に影響するグローバルな乗数. これはサイドビューのゲームでのみ意味がある. トップダウンゲームでは0.0にするべき. デフォルト: 1.0
 	float gravity;
 
 	// The top left corner of the viewport. Internally just an offset when 
 	// drawing background_maps and entities.
+	// ビューポートの左上隅。内部的にはbackground_mapやentityを描画する際のオフセットに過ぎない.
 	vec2_t viewport;
 
 	// Various infos about the last frame
+	// 最後のフレームに関する様々な情報
 	struct {
 		int entities;
 		int checks;
@@ -99,10 +104,14 @@ extern engine_t engine;
 // from the middle of a frame.
 // Your main_init() function must call engine_set_scene() to set the initial
 // first scene.
+// scene_を現在のシーンにする. これは古いシーンでscene->cleanup()を呼び出し、新しいシーンでscene->init()を呼び出す.
+// 実際のシーンの入れ替えは次のフレームの最初に行われるので、フレームの途中からengine_set_scene()を呼び出しても大丈夫.
+// main_init()関数は最初のシーンを設定するためにengine_set_scene()を呼び出す必要があある.
 void engine_set_scene(scene_t *scene);
 
 // Load a level (background maps, collision map and entities) from a json path.
 // This should only be called from within your scenes init() function.
+// jsonパスからレベル（バックグラウンドマップ、コリジョンマップ、エンティティ）をロードする. これは、シーンのinit()関数の中からのみ呼び出す必要がある.
 void engine_load_level(char *json_path);
 
 // Add a background map; typically done through engine_load_level()
